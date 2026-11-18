@@ -1,0 +1,25 @@
+name: image-resizer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - image-resizer/**
+      - .github/workflows/image-resizer.yml
+      - .github/workflows/_sam-pipeline.yml
+  pull_request:
+    paths:
+      - image-resizer/**
+      - .github/workflows/image-resizer.yml
+      - .github/workflows/_sam-pipeline.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    uses: ./.github/workflows/_sam-pipeline.yml
+    with:
+      project: image-resizer
+    secrets: inherit

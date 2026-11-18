@@ -1,0 +1,153 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  image-resizer - Al subir una imagen al bucket de uploads, una Lambda la
+  valida y guarda una versión reducida en el bucket de resized.
+
+Parameters:
+  MaxWidth:
+    Type: Number
+    Default: 800
+    MinValue: 16
+    MaxValue: 4096
+    Description: Ancho maximo (px) de la imagen reducida.
+  MaxBytes:
+    Type: Number
+    Default: 10485760
+    Description: Tamano maximo (bytes) aceptado para la imagen original (10 MB).
+  ObjectExpirationDays:
+    Type: Number
+    Default: 7
+    Description: Dias tras los cuales S3 borra los objetos (evita costos en el workshop).
+
+Resources:
+  # IMPORTANTE: dos buckets distintos. Si la Lambda escribiera en el mismo bucket que
+  # dispara el evento, se invocaría a sí misma en bucle (invocación recursiva).
+  #
+  # Los nombres se construyen con !Sub (y no con !Ref en las policies de la función)
+  # para evitar la dependencia circular bucket -> notificación -> función -> rol -> bucket.
+  UploadsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-uploads-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-objects
+            Status: Enabled
+            ExpirationInDays: !Ref ObjectExpirationDays
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
+  ResizedBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-resized-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-objects
+            Status: Enabled
+            ExpirationInDays: !Ref ObjectExpirationDays
+
+  # Solo se permite acceso por HTTPS (best practice de seguridad en S3)
+  UploadsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref UploadsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt UploadsBucket.Arn
+              - !Sub ${UploadsBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  ResizedBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ResizedBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt ResizedBucket.Arn
+              - !Sub ${ResizedBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  ImageResizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Valida imágenes subidas a S3 y genera una versión reducida
+      Handler: src/handlers/resize.handler
+      Runtime: nodejs24.x
+      # x86_64: los binarios precompilados de sharp que instala npm en Linux x64
+      # (runner de GitHub Actions o sam build --use-container) coinciden con Lambda.
+      Architectures:
+        - x86_64
+      MemorySize: 1024
+      Timeout: 30
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        SystemLogLevel: WARN
+      Environment:
+        Variables:
+          DEST_BUCKET: !Sub ${AWS::StackName}-resized-${AWS::AccountId}
+          MAX_WIDTH: !Ref MaxWidth
+          MAX_BYTES: !Ref MaxBytes
+      # Mínimo privilegio: leer/etiquetar en uploads, solo escribir en resized
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Sub ${AWS::StackName}-uploads-${AWS::AccountId}
+        - S3WritePolicy:
+            BucketName: !Sub ${AWS::StackName}-resized-${AWS::AccountId}
+        - Statement:
+            - Sid: TagRejectedUploads
+              Effect: Allow
+              Action: s3:PutObjectTagging
+              Resource: !Sub arn:${AWS::Partition}:s3:::${AWS::StackName}-uploads-${AWS::AccountId}/*
+      Events:
+        ImageUploaded:
+          Type: S3
+          Properties:
+            Bucket: !Ref UploadsBucket
+            Events: s3:ObjectCreated:*
+
+  # Log group explícito (mismo nombre que el que crearía Lambda) para controlar la retención
+  ImageResizerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ImageResizerFunction}
+      RetentionInDays: 7
+
+Outputs:
+  UploadsBucketName:
+    Description: Bucket donde se suben las imagenes originales
+    Value: !Ref UploadsBucket
+  ResizedBucketName:
+    Description: Bucket donde se guardan las imagenes reducidas
+    Value: !Ref ResizedBucket
+  ImageResizerFunctionArn:
+    Description: ARN de la funcion Lambda
+    Value: !GetAtt ImageResizerFunction.Arn

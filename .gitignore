@@ -1,0 +1,13 @@
+node_modules/
+**/.aws-sam/
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+# Configuración personal de Claude Code
+.claude/settings.local.json
+# Imágenes de prueba locales
+samples/

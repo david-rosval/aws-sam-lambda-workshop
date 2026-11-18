@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  todos-api - Lambda detrás de API Gateway (HTTP API) que consulta
+  https://jsonplaceholder.typicode.com/todos y devuelve el listado.
+
+Parameters:
+  TodosBaseUrl:
+    Type: String
+    Default: https://jsonplaceholder.typicode.com
+    Description: URL base del servicio externo de TODOs.
+
+Globals:
+  Function:
+    Runtime: nodejs24.x
+    Architectures:
+      - arm64
+    Timeout: 10
+    MemorySize: 256
+    # Logs estructurados en JSON (filtrables en CloudWatch Logs Insights)
+    LoggingConfig:
+      LogFormat: JSON
+      ApplicationLogLevel: INFO
+      SystemLogLevel: WARN
+
+Resources:
+  # API Gateway HTTP API: más simple y económica que una REST API.
+  TodosHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      # Límites bajos para proteger la cuenta (free tier / créditos) de abusos
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 10
+        ThrottlingRateLimit: 5
+
+  TodosFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Devuelve el listado de TODOs desde jsonplaceholder
+      CodeUri: todos/
+      Handler: app.lambdaHandler
+      Environment:
+        Variables:
+          TODOS_BASE_URL: !Ref TodosBaseUrl
+      Events:
+        GetTodos:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TodosHttpApi
+            Path: /todos
+            Method: GET
+
+  # Log group explícito (mismo nombre que el que crearía Lambda) para controlar
+  # la retención: por defecto los logs se guardan para siempre.
+  TodosFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${TodosFunction}
+      RetentionInDays: 7
+
+Outputs:
+  TodosApiUrl:
+    Description: URL del endpoint GET /todos
+    Value: !Sub https://${TodosHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/todos
+  TodosFunctionArn:
+    Description: ARN de la funcion Lambda
+    Value: !GetAtt TodosFunction.Arn

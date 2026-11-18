@@ -1,0 +1,120 @@
+# Workflow reutilizable: lo llaman todos-api.yml e image-resizer.yml.
+#   validate: cfn-lint + sam validate --lint + tests (en PRs y en push)
+#   deploy:   sam build + sam deploy (solo en main, con el Environment "dev")
+#
+# Credenciales (creadas con `sam pipeline bootstrap`, ver README):
+#   - Secrets del Environment "dev":    AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY  (pipeline user)
+#   - Variables del Environment "dev":  PIPELINE_EXECUTION_ROLE, CLOUDFORMATION_EXECUTION_ROLE, ARTIFACTS_BUCKET
+#   - Variable del repositorio:         AWS_REGION
+name: sam-pipeline
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: Carpeta del proyecto SAM (donde está template.yaml)
+        required: true
+        type: string
+      code-dir:
+        description: Carpeta del código de la función, relativa al proyecto (donde está package.json)
+        required: false
+        type: string
+        default: .
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  CFN_LINT_VERSION: '1.60.1'
+
+jobs:
+  validate:
+    name: Lint y tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.project }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ inputs.project }}/${{ inputs.code-dir }}/package-lock.json
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Instalar cfn-lint
+        run: pip install "cfn-lint==${CFN_LINT_VERSION}"
+
+      - uses: aws-actions/setup-sam@v3
+        with:
+          use-installer: true
+
+      - name: cfn-lint
+        run: cfn-lint template.yaml
+
+      - name: sam validate --lint
+        run: sam validate --lint --region "${{ vars.AWS_REGION || 'us-east-2' }}"
+
+      - name: Tests unitarios
+        working-directory: ${{ inputs.project }}/${{ inputs.code-dir }}
+        run: |
+          npm ci
+          npm test
+
+  deploy:
+    name: Deploy a dev
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: dev
+    # Nunca dos deploys del mismo stack a la vez
+    concurrency:
+      group: deploy-${{ inputs.project }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: ${{ inputs.project }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: aws-actions/setup-sam@v3
+        with:
+          use-installer: true
+
+      # El pipeline user solo puede asumir PipelineExecutionRole: las credenciales
+      # que usa el resto del job son temporales (1 hora).
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.PIPELINE_EXECUTION_ROLE }}
+          role-session-name: gh-${{ inputs.project }}-${{ github.run_id }}
+          role-duration-seconds: 3600
+          # Los roles creados por `sam pipeline bootstrap` no permiten sts:TagSession
+          role-skip-session-tagging: true
+
+      - name: sam build
+        run: sam build
+
+      # CloudFormation crea los recursos con su propio rol (--role-arn), no con el del pipeline
+      - name: sam deploy
+        run: >-
+          sam deploy
+          --region "${{ vars.AWS_REGION }}"
+          --no-resolve-s3
+          --s3-bucket "${{ vars.ARTIFACTS_BUCKET }}"
+          --role-arn "${{ vars.CLOUDFORMATION_EXECUTION_ROLE }}"
+          --capabilities CAPABILITY_IAM
+          --no-confirm-changeset
+          --no-fail-on-empty-changeset

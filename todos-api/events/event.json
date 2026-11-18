@@ -1,0 +1,30 @@
+{
+  "version": "2.0",
+  "routeKey": "GET /todos",
+  "rawPath": "/todos",
+  "rawQueryString": "limit=5&completed=true",
+  "headers": {
+    "accept": "application/json"
+  },
+  "queryStringParameters": {
+    "limit": "5",
+    "completed": "true"
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "api-id",
+    "domainName": "api-id.execute-api.us-east-2.amazonaws.com",
+    "http": {
+      "method": "GET",
+      "path": "/todos",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "curl"
+    },
+    "requestId": "id",
+    "routeKey": "GET /todos",
+    "stage": "$default",
+    "timeEpoch": 1763500000000
+  },
+  "isBase64Encoded": false
+}

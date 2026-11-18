@@ -1,0 +1,26 @@
+name: todos-api
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - todos-api/**
+      - .github/workflows/todos-api.yml
+      - .github/workflows/_sam-pipeline.yml
+  pull_request:
+    paths:
+      - todos-api/**
+      - .github/workflows/todos-api.yml
+      - .github/workflows/_sam-pipeline.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    uses: ./.github/workflows/_sam-pipeline.yml
+    with:
+      project: todos-api
+      code-dir: todos
+    secrets: inherit
