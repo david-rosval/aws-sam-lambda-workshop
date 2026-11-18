@@ -16,3 +16,9 @@ GET /todos?limit=5&userId=1&completed=true
 | `events/event.json` | Evento de ejemplo para `sam local invoke` |
 
 Los pasos completos están en el [README principal](../README.md#lab-1--todos-api-api-gateway--lambda).
+
+## Probar el endpoint desplegado
+
+```bash
+sam list stack-outputs --stack-name todos-api --profile jpadmin --region us-east-2
+```
