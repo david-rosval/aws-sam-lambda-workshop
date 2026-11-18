@@ -208,9 +208,9 @@ sam validate --lint --region us-east-2
 ### 1.4 Build y prueba local (requiere Docker)
 
 ```bash
-sam build
-sam local invoke TodosFunction --event events/event.json
-sam local start-api
+sam build --profile jpadmin --region us-east-2
+sam local invoke TodosFunction --event events/event.json --profile jpadmin --region us-east-2
+sam local start-api --profile jpadmin --region us-east-2
 ```
 
 Con `sam local start-api` corriendo, en otra terminal:
@@ -232,8 +232,11 @@ sam deploy --guided --profile jpadmin --region us-east-2
 Las siguientes veces basta con:
 
 ```bash
-sam build && sam deploy --profile jpadmin --region us-east-2
+sam build --profile jpadmin --region us-east-2 && sam deploy --profile jpadmin --region us-east-2
 ```
+
+> `samconfig.toml` tiene `confirm_changeset = true`: SAM muestra los cambios (changeset) y pide confirmar con `y`.
+> Es una buena práctica para ver qué se va a crear, modificar o **reemplazar** antes de aplicarlo.
 
 > En PowerShell 5.1 `&&` no existe: ejecuta `sam build` y luego `sam deploy ...` por separado (PowerShell 7 sí lo soporta).
 
@@ -254,6 +257,15 @@ curl "https://<api-id>.execute-api.us-east-2.amazonaws.com/todos?limit=5&complet
 
 ```bash
 sam logs --stack-name todos-api --tail --profile jpadmin --region us-east-2
+```
+
+Los logs están en **formato JSON** (`LoggingConfig.LogFormat: JSON`): el código hace `console.info({ message, count, ... })`
+y el runtime agrega `timestamp`, `level` y `requestId`. En CloudWatch → **Logs Insights** puedes consultarlos por campo:
+
+```
+fields @timestamp, level, message.message, message.count
+| filter level = "INFO"
+| sort @timestamp desc
 ```
 
 ---
@@ -301,11 +313,11 @@ Build:
 
 ```bash
 # Linux x86_64 (y el runner de GitHub Actions)
-sam build
+sam build --profile jpadmin --region us-east-2
 
 # Windows / macOS (o Linux ARM): compila dentro de un contenedor Linux para que sharp
 # traiga el binario correcto para Lambda (requiere Docker en ejecución)
-sam build --use-container
+sam build --use-container --profile jpadmin --region us-east-2
 ```
 
 > ⚠️ Si en Windows ejecutas `sam build` sin `--use-container`, npm instala el binario de `sharp` **para Windows**
@@ -413,7 +425,7 @@ sam pipeline bootstrap --stage dev --permissions-provider iam --no-create-image-
 ```
 
 > ⚠️ Al terminar, el comando **imprime en pantalla la access key y el secret del pipeline user**.
-> No compartas pantalla en ese momento ni pegues esa salida en ningún lado. Si se expone, rota la clave (sección [Limpieza](#limpieza-importante)).
+> No compartas pantalla en ese momento ni pegues esa salida en ningún lado. Si se expone, rótala (ver [Rotar la access key del pipeline user](#rotar-la-access-key-del-pipeline-user)).
 
 3. Lee los outputs y la access key del pipeline user:
 
@@ -499,6 +511,23 @@ sam delete --stack-name aws-sam-cli-managed-dev-pipeline-resources --profile jpa
 ```
 
 Por último, borra los secrets del Environment `dev` en GitHub.
+
+### Rotar la access key del pipeline user
+
+Hazlo si la clave se expuso (p. ej. quedó visible al ejecutar `sam pipeline bootstrap`) y, en general, de forma periódica:
+
+```bash
+aws iam list-access-keys --user-name <PipelineUser> --profile jpadmin --region us-east-2
+aws iam create-access-key --user-name <PipelineUser> --profile jpadmin --region us-east-2
+gh secret set AWS_ACCESS_KEY_ID --env dev
+gh secret set AWS_SECRET_ACCESS_KEY --env dev
+gh workflow run todos-api.yml
+aws iam delete-access-key --user-name <PipelineUser> --access-key-id <clave-anterior> --profile jpadmin --region us-east-2
+```
+
+- `<PipelineUser>` es el nombre del usuario: la última parte del output `PipelineUser` del stack de bootstrap (`aws-sam-cli-managed-dev-pipeline-resou-PipelineUser-...`).
+- Borra la clave anterior **después** de comprobar que el workflow funciona con la nueva.
+- El secreto `PipelineUserSecretKey` de Secrets Manager sigue guardando la clave original. Tras la rotación ya no es válido, así que la fuente de verdad pasa a ser GitHub Secrets.
 
 ---
 

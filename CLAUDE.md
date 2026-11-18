@@ -28,8 +28,8 @@ cfn-lint
 
 # Dentro de cada proyecto (todos-api/ o image-resizer/)
 sam validate --lint --region us-east-2
-sam build
-sam local invoke <FunctionLogicalId> --event events/<archivo>.json   # requiere Docker
+sam build --profile jpadmin --region us-east-2
+sam local invoke <FunctionLogicalId> --event events/<archivo>.json --profile jpadmin --region us-east-2   # requiere Docker
 sam deploy --profile jpadmin --region us-east-2                      # samconfig: confirm_changeset = true
 sam logs --stack-name <stack> --tail --profile jpadmin --region us-east-2
 sam list stack-outputs --stack-name <stack> --profile jpadmin --region us-east-2
