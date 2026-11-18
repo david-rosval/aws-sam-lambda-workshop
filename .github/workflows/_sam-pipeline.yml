@@ -42,7 +42,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: ${{ inputs.project }}/${{ inputs.code-dir }}/package-lock.json
+          cache-dependency-path: ${{ inputs.project }}/**/package-lock.json
 
       - uses: actions/setup-python@v7
         with:
