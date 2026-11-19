@@ -20,5 +20,5 @@ Los pasos completos están en el [README principal](../README.md#lab-1--todos-ap
 ## Probar el endpoint desplegado
 
 ```bash
-sam list stack-outputs --stack-name todos-api --profile jpadmin --region us-east-2
+sam list stack-outputs --stack-name todos-api --profile TU_PERFIL --region us-east-2
 ```

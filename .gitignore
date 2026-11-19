@@ -9,5 +9,6 @@ Thumbs.db
 .idea/
 # Configuración personal de Claude Code
 .claude/settings.local.json
+CLAUDE.local.md
 # Imágenes de prueba locales
 samples/

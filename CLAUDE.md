@@ -13,8 +13,9 @@ Dos proyectos SAM independientes (cada uno con su `template.yaml`, `samconfig.to
 
 ## Reglas obligatorias
 
-- **Todo comando `sam` o `aws` lleva `--profile jpadmin --region us-east-2`.** La cuenta es una *project account* de la "nueva experiencia" de AWS, con SCPs gestionados por AWS. Cualquier otra región devuelve `AccessDenied`, y no se pueden crear proveedores IAM OIDC (`iam:*Provider*` denegado).
-- **`jpadmin` es el perfil personal del instructor** (usuario IAM admin de su cuenta, en `~/.aws/credentials`). Se usa solo en los comandos que se ejecutan en esta máquina. **En el `README.md` los comandos usan el marcador `TU_PERFIL`** porque cada asistente crea su propio usuario IAM, sus access keys y su perfil (sección 1.1 del README). Nunca escribir `jpadmin` en comandos del README.
+- **Todo comando `sam` o `aws` lleva `--profile <perfil> --region <región>`.** El perfil es personal: cada persona crea su usuario IAM, sus access keys y su perfil de AWS CLI (sección 1.1 del README). El perfil y los datos de la cuenta de quien trabaja en el repo están en `CLAUDE.local.md` (no versionado). Si ese archivo no existe, pregunta qué perfil usar antes de ejecutar comandos contra AWS.
+- **Nunca escribir un nombre de perfil real en archivos versionados.** En el `README.md` los comandos usan el marcador `TU_PERFIL`.
+- **Región por defecto `us-east-2`** (en `samconfig.toml` y `.cfnlintrc`). Las cuentas de la "nueva experiencia" de AWS (*project accounts*) tienen SCPs gestionados por AWS: solo permiten la región asignada (cualquier otra devuelve `AccessDenied`) y deniegan `iam:*Provider*`, así que no se pueden crear proveedores OIDC.
 - **Nunca poner `profile` en `samconfig.toml`.** Los asistentes usan sus propios perfiles; la región sí va en `[default.global.parameters]`.
 - **Runtime `nodejs24.x`**: `nodejs26.x` sigue en preview en Lambda.
 - **Usar los comandos de SAM** (`sam init`, `sam pipeline bootstrap`, `sam local generate-event`, `sam list stack-outputs`…) en lugar de crear a mano lo que SAM genera: es lo que se enseña.
@@ -29,11 +30,11 @@ cfn-lint
 
 # Dentro de cada proyecto (todos-api/ o image-resizer/)
 sam validate --lint --region us-east-2
-sam build --profile jpadmin --region us-east-2
-sam local invoke <FunctionLogicalId> --event events/<archivo>.json --profile jpadmin --region us-east-2   # requiere Docker
-sam deploy --profile jpadmin --region us-east-2                      # samconfig: confirm_changeset = true
-sam logs --stack-name <stack> --tail --profile jpadmin --region us-east-2
-sam list stack-outputs --stack-name <stack> --profile jpadmin --region us-east-2
+sam build --profile <perfil> --region us-east-2
+sam local invoke <FunctionLogicalId> --event events/<archivo>.json --profile <perfil> --region us-east-2   # requiere Docker
+sam deploy --profile <perfil> --region us-east-2                      # samconfig: confirm_changeset = true
+sam logs --stack-name <stack> --tail --profile <perfil> --region us-east-2
+sam list stack-outputs --stack-name <stack> --profile <perfil> --region us-east-2
 
 # Tests (runner nativo node:test). todos-api: en todos-api/todos/; image-resizer: en image-resizer/
 npm test
@@ -65,4 +66,4 @@ pre-commit run --all-files
   - Environment `dev`: secrets `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`; variables `PIPELINE_EXECUTION_ROLE`, `CLOUDFORMATION_EXECUTION_ROLE` y `ARTIFACTS_BUCKET`.
   - Variable de repositorio: `AWS_REGION`.
 - Los recursos del pipeline viven en el stack `aws-sam-cli-managed-dev-pipeline-resources`, y la access key del pipeline user está en Secrets Manager (output `PipelineUserSecretKey`).
-- GitHub: cuenta `david-rosval`. El remote usa el alias SSH `github-personal` (`git@github-personal:david-rosval/<repo>.git`). El token de `gh` no tiene scope `workflow`, así que los cambios en `.github/workflows/` se suben por SSH.
+- Si el token de `gh` no tiene scope `workflow`, los cambios en `.github/workflows/` se suben con `git push` por SSH (la cuenta de GitHub y el alias SSH de cada persona van en `CLAUDE.local.md`).
