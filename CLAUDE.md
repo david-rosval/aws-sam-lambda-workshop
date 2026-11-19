@@ -14,6 +14,7 @@ Dos proyectos SAM independientes (cada uno con su `template.yaml`, `samconfig.to
 ## Reglas obligatorias
 
 - **Todo comando `sam` o `aws` lleva `--profile jpadmin --region us-east-2`.** La cuenta es una *project account* de la "nueva experiencia" de AWS, con SCPs gestionados por AWS. Cualquier otra región devuelve `AccessDenied`, y no se pueden crear proveedores IAM OIDC (`iam:*Provider*` denegado).
+- **`jpadmin` es el perfil personal del instructor** (usuario IAM admin de su cuenta, en `~/.aws/credentials`). Se usa solo en los comandos que se ejecutan en esta máquina. **En el `README.md` los comandos usan el marcador `TU_PERFIL`** porque cada asistente crea su propio usuario IAM, sus access keys y su perfil (sección 1.1 del README). Nunca escribir `jpadmin` en comandos del README.
 - **Nunca poner `profile` en `samconfig.toml`.** Los asistentes usan sus propios perfiles; la región sí va en `[default.global.parameters]`.
 - **Runtime `nodejs24.x`**: `nodejs26.x` sigue en preview en Lambda.
 - **Usar los comandos de SAM** (`sam init`, `sam pipeline bootstrap`, `sam local generate-event`, `sam list stack-outputs`…) en lugar de crear a mano lo que SAM genera: es lo que se enseña.

@@ -30,9 +30,11 @@ Lab 2
 7. [Windows: diferencias a tener en cuenta](#windows-diferencias-a-tener-en-cuenta)
 8. [Troubleshooting](#troubleshooting)
 
-> **Convención de este README.** Todos los comandos usan `--profile jpadmin --region us-east-2`
-> (el perfil y la región del instructor). **Reemplázalos por tu perfil y tu región** (ver [sección 1](#1-configurar-la-cuenta-aws)).
-> Los comandos están escritos en **una sola línea** para que funcionen igual en Bash y en PowerShell.
+> **Convención de este README.** Todos los comandos `aws` y `sam` usan `--profile TU_PERFIL --region us-east-2`.
+> - **`TU_PERFIL`**: reemplázalo por el nombre del perfil de AWS CLI que configuraste en la [sección 1.1](#11-usuario-iam-access-keys-y-perfil-requisito).
+>   El instructor, por ejemplo, usa un perfil llamado `jpadmin`; tú usa **el nombre que le hayas puesto al tuyo**.
+> - **`us-east-2`**: reemplázalo si tu cuenta tiene otra región (ver [sección 1.2](#12-tu-región)).
+> - Los comandos están escritos en **una sola línea** para que funcionen igual en Bash y en PowerShell.
 
 ---
 
@@ -47,6 +49,8 @@ Lab 2
 | Git | reciente | Control de versiones |
 | Python + `uv` | Python ≥ 3.10 | Instalar `cfn-lint` y `pre-commit` |
 | GitHub CLI (`gh`) | opcional | Configurar secrets y ver los workflows desde la terminal |
+| **Cuenta AWS + perfil de CLI** | — | **Requisito:** usuario IAM con access keys configurado como perfil ([sección 1.1](#11-usuario-iam-access-keys-y-perfil-requisito)) |
+| Cuenta de GitHub | — | Hacer fork del repo y ejecutar el pipeline (Lab 3) |
 
 > ¿Por qué Node 24 y no 26? Node 26 ya es LTS, pero en Lambda `nodejs26.x` todavía está en **preview**
 > (sin SLA, no recomendado para producción). `nodejs24.x` es GA y tiene soporte hasta abril de 2028.
@@ -129,19 +133,63 @@ pre-commit --version
 
 ## 1. Configurar la cuenta AWS
 
-### 1.1 Credenciales (perfil)
+### 1.1 Usuario IAM, access keys y perfil (requisito)
 
-Crea un usuario IAM con **access key** para uso programático (consola → IAM → Users → Create user → Security credentials → Create access key) y configura un perfil:
+> ⚠️ **Requisito obligatorio antes del workshop.** Todos los comandos `aws` y `sam` usan un **perfil** de AWS CLI
+> (`--profile TU_PERFIL`). Ese perfil **no existe hasta que lo crees tú**: cada asistente debe crear en **su propia cuenta**
+> un usuario IAM con permisos y sus access keys, y registrarlas como perfil en su computadora.
+
+**Paso 1 – Crear el usuario IAM** (consola de AWS → **IAM** → **Users** → **Create user**):
+
+1. **User name**: el que quieras (p. ej. `workshop-admin`).
+2. No marques el acceso a la consola: este usuario es solo para la CLI.
+3. **Permissions options** → **Attach policies directly** → marca **`AdministratorAccess`**.
+   Durante el workshop se crean roles IAM, buckets, funciones Lambda, APIs y stacks de CloudFormation, así que se necesitan permisos amplios.
+4. **Create user**.
+
+**Paso 2 – Crear las access keys** (IAM → Users → tu usuario → pestaña **Security credentials**):
+
+1. **Access keys** → **Create access key**.
+2. **Use case**: **Command Line Interface (CLI)** → acepta la confirmación → **Next** → **Create access key**.
+3. Copia el **Access key ID** y el **Secret access key**, o usa **Download .csv file**.
+   El secret **solo se muestra una vez**; si lo pierdes, crea otra clave.
+
+**Paso 3 – Registrar el perfil en tu computadora.** Elige un nombre de perfil (p. ej. `workshop`). Ese nombre es el que usarás en lugar de `TU_PERFIL` en todos los comandos:
 
 ```bash
-aws configure --profile jpadmin
+aws configure --profile TU_PERFIL
 ```
+
+Responde así:
+
+| Pregunta | Respuesta |
+|---|---|
+| AWS Access Key ID | El *Access key ID* del paso 2 |
+| AWS Secret Access Key | El *Secret access key* del paso 2 |
+| Default region name | Tu región (ver [1.2](#12-tu-región)), p. ej. `us-east-2` |
+| Default output format | `json` |
+
+Esto guarda las claves en `~/.aws/credentials` (Windows: `%USERPROFILE%\.aws\credentials`) con este formato:
+
+```ini
+[workshop]
+aws_access_key_id = AKIA...
+aws_secret_access_key = ...
+```
+
+**Paso 4 – Verificar.** Debe mostrar tu número de cuenta y el ARN de tu usuario:
 
 ```bash
-aws sts get-caller-identity --profile jpadmin
+aws sts get-caller-identity --profile TU_PERFIL
 ```
 
-> Nunca subas tus access keys al repositorio. El perfil vive en `~/.aws/credentials` (Windows: `%USERPROFILE%\.aws\credentials`).
+> **Buenas prácticas con estas claves**
+> - Nunca las subas a un repositorio ni las pegues en chats o capturas de pantalla.
+> - `samconfig.toml` **no** guarda el perfil a propósito: cada persona usa el suyo con `--profile`.
+> - Al terminar el workshop, **desactiva o borra** las access keys (IAM → Users → Security credentials) o el usuario completo.
+>
+> **Tip:** para no escribir `--profile` en cada comando puedes definir la variable de entorno `AWS_PROFILE`
+> (ver [Windows: diferencias](#windows-diferencias-a-tener-en-cuenta)). En este README siempre se escribe explícito para que quede claro qué cuenta se usa.
 
 ### 1.2 Tu región
 
@@ -208,9 +256,9 @@ sam validate --lint --region us-east-2
 ### 1.4 Build y prueba local (requiere Docker)
 
 ```bash
-sam build --profile jpadmin --region us-east-2
-sam local invoke TodosFunction --event events/event.json --profile jpadmin --region us-east-2
-sam local start-api --profile jpadmin --region us-east-2
+sam build --profile TU_PERFIL --region us-east-2
+sam local invoke TodosFunction --event events/event.json --profile TU_PERFIL --region us-east-2
+sam local start-api --profile TU_PERFIL --region us-east-2
 ```
 
 Con `sam local start-api` corriendo, en otra terminal:
@@ -226,13 +274,13 @@ curl "http://127.0.0.1:3000/todos?limit=3"
 La primera vez, con el asistente guiado (crea también el API Gateway):
 
 ```bash
-sam deploy --guided --profile jpadmin --region us-east-2
+sam deploy --guided --profile TU_PERFIL --region us-east-2
 ```
 
 Las siguientes veces basta con:
 
 ```bash
-sam build --profile jpadmin --region us-east-2 && sam deploy --profile jpadmin --region us-east-2
+sam build --profile TU_PERFIL --region us-east-2 && sam deploy --profile TU_PERFIL --region us-east-2
 ```
 
 > `samconfig.toml` tiene `confirm_changeset = true`: SAM muestra los cambios (changeset) y pide confirmar con `y`.
@@ -243,7 +291,7 @@ sam build --profile jpadmin --region us-east-2 && sam deploy --profile jpadmin -
 Ver la URL del API y probarla:
 
 ```bash
-sam list stack-outputs --stack-name todos-api --profile jpadmin --region us-east-2
+sam list stack-outputs --stack-name todos-api --profile TU_PERFIL --region us-east-2
 curl "https://<api-id>.execute-api.us-east-2.amazonaws.com/todos?limit=5&completed=true"
 ```
 
@@ -256,7 +304,7 @@ curl "https://<api-id>.execute-api.us-east-2.amazonaws.com/todos?limit=5&complet
 ### 1.6 Logs
 
 ```bash
-sam logs --stack-name todos-api --tail --profile jpadmin --region us-east-2
+sam logs --stack-name todos-api --tail --profile TU_PERFIL --region us-east-2
 ```
 
 Los logs están en **formato JSON** (`LoggingConfig.LogFormat: JSON`): el código hace `console.info({ message, count, ... })`
@@ -313,11 +361,11 @@ Build:
 
 ```bash
 # Linux x86_64 (y el runner de GitHub Actions)
-sam build --profile jpadmin --region us-east-2
+sam build --profile TU_PERFIL --region us-east-2
 
 # Windows / macOS (o Linux ARM): compila dentro de un contenedor Linux para que sharp
 # traiga el binario correcto para Lambda (requiere Docker en ejecución)
-sam build --use-container --profile jpadmin --region us-east-2
+sam build --use-container --profile TU_PERFIL --region us-east-2
 ```
 
 > ⚠️ Si en Windows ejecutas `sam build` sin `--use-container`, npm instala el binario de `sharp` **para Windows**
@@ -326,8 +374,8 @@ sam build --use-container --profile jpadmin --region us-east-2
 ### 2.3 Deploy (crea los dos buckets)
 
 ```bash
-sam deploy --guided --profile jpadmin --region us-east-2
-sam list stack-outputs --stack-name image-resizer --profile jpadmin --region us-east-2
+sam deploy --guided --profile TU_PERFIL --region us-east-2
+sam list stack-outputs --stack-name image-resizer --profile TU_PERFIL --region us-east-2
 ```
 
 Anota `UploadsBucketName` y `ResizedBucketName`.
@@ -336,22 +384,22 @@ Anota `UploadsBucketName` y `ResizedBucketName`.
 
 ```bash
 # Subir una imagen
-aws s3 cp foto.jpg s3://image-resizer-uploads-<account-id>/foto.jpg --profile jpadmin --region us-east-2
+aws s3 cp foto.jpg s3://image-resizer-uploads-<account-id>/foto.jpg --profile TU_PERFIL --region us-east-2
 
 # Ver la versión reducida y descargarla
-aws s3 ls s3://image-resizer-resized-<account-id>/ --profile jpadmin --region us-east-2
-aws s3 cp s3://image-resizer-resized-<account-id>/foto.jpg foto-reducida.jpg --profile jpadmin --region us-east-2
+aws s3 ls s3://image-resizer-resized-<account-id>/ --profile TU_PERFIL --region us-east-2
+aws s3 cp s3://image-resizer-resized-<account-id>/foto.jpg foto-reducida.jpg --profile TU_PERFIL --region us-east-2
 
 # Logs en vivo
-sam logs --stack-name image-resizer --tail --profile jpadmin --region us-east-2
+sam logs --stack-name image-resizer --tail --profile TU_PERFIL --region us-east-2
 ```
 
 Probar la validación con un archivo que **no** es imagen pero tiene extensión `.jpg`:
 
 ```bash
 echo "no soy una imagen" > falsa.jpg
-aws s3 cp falsa.jpg s3://image-resizer-uploads-<account-id>/falsa.jpg --profile jpadmin --region us-east-2
-aws s3api get-object-tagging --bucket image-resizer-uploads-<account-id> --key falsa.jpg --profile jpadmin --region us-east-2
+aws s3 cp falsa.jpg s3://image-resizer-uploads-<account-id>/falsa.jpg --profile TU_PERFIL --region us-east-2
+aws s3api get-object-tagging --bucket image-resizer-uploads-<account-id> --key falsa.jpg --profile TU_PERFIL --region us-east-2
 ```
 
 Debe mostrar `validation=rejected` y `reason=invalid-image`, y en los logs aparece `Imagen rechazada` con el motivo.
@@ -421,7 +469,7 @@ sam build → sam deploy --s3-bucket <artifacts> --role-arn <CloudFormationExecu
 2. Desde la raíz del repo, crea los recursos del pipeline (una vez, compartidos por ambos proyectos):
 
 ```bash
-sam pipeline bootstrap --stage dev --permissions-provider iam --no-create-image-repository --no-interactive --no-confirm-changeset --profile jpadmin --region us-east-2
+sam pipeline bootstrap --stage dev --permissions-provider iam --no-create-image-repository --no-interactive --no-confirm-changeset --profile TU_PERFIL --region us-east-2
 ```
 
 > ⚠️ Al terminar, el comando **imprime en pantalla la access key y el secret del pipeline user**.
@@ -430,8 +478,8 @@ sam pipeline bootstrap --stage dev --permissions-provider iam --no-create-image-
 3. Lee los outputs y la access key del pipeline user:
 
 ```bash
-aws cloudformation describe-stacks --stack-name aws-sam-cli-managed-dev-pipeline-resources --query "Stacks[0].Outputs" --output table --profile jpadmin --region us-east-2
-aws secretsmanager get-secret-value --secret-id <PipelineUserSecretKey> --query SecretString --output text --profile jpadmin --region us-east-2
+aws cloudformation describe-stacks --stack-name aws-sam-cli-managed-dev-pipeline-resources --query "Stacks[0].Outputs" --output table --profile TU_PERFIL --region us-east-2
+aws secretsmanager get-secret-value --secret-id <PipelineUserSecretKey> --query SecretString --output text --profile TU_PERFIL --region us-east-2
 ```
 
 > `sam pipeline init` (sin `--bootstrap`) genera un workflow oficial de ejemplo a partir de estos recursos.
@@ -498,16 +546,16 @@ Además, [`dependabot.yml`](.github/dependabot.yml) abre PRs semanales para actu
 CloudFormation **no puede borrar buckets con objetos**: vacíalos primero.
 
 ```bash
-aws s3 rm s3://image-resizer-uploads-<account-id> --recursive --profile jpadmin --region us-east-2
-aws s3 rm s3://image-resizer-resized-<account-id> --recursive --profile jpadmin --region us-east-2
-sam delete --stack-name image-resizer --profile jpadmin --region us-east-2
-sam delete --stack-name todos-api --profile jpadmin --region us-east-2
+aws s3 rm s3://image-resizer-uploads-<account-id> --recursive --profile TU_PERFIL --region us-east-2
+aws s3 rm s3://image-resizer-resized-<account-id> --recursive --profile TU_PERFIL --region us-east-2
+sam delete --stack-name image-resizer --profile TU_PERFIL --region us-east-2
+sam delete --stack-name todos-api --profile TU_PERFIL --region us-east-2
 ```
 
 Recursos del pipeline: el bucket de artefactos está versionado, así que vacíalo desde la consola de S3 (botón **Empty**) junto con su bucket de logs y luego:
 
 ```bash
-sam delete --stack-name aws-sam-cli-managed-dev-pipeline-resources --profile jpadmin --region us-east-2
+sam delete --stack-name aws-sam-cli-managed-dev-pipeline-resources --profile TU_PERFIL --region us-east-2
 ```
 
 Por último, borra los secrets del Environment `dev` en GitHub.
@@ -517,12 +565,12 @@ Por último, borra los secrets del Environment `dev` en GitHub.
 Hazlo si la clave se expuso (p. ej. quedó visible al ejecutar `sam pipeline bootstrap`) y, en general, de forma periódica:
 
 ```bash
-aws iam list-access-keys --user-name <PipelineUser> --profile jpadmin --region us-east-2
-aws iam create-access-key --user-name <PipelineUser> --profile jpadmin --region us-east-2
+aws iam list-access-keys --user-name <PipelineUser> --profile TU_PERFIL --region us-east-2
+aws iam create-access-key --user-name <PipelineUser> --profile TU_PERFIL --region us-east-2
 gh secret set AWS_ACCESS_KEY_ID --env dev
 gh secret set AWS_SECRET_ACCESS_KEY --env dev
 gh workflow run todos-api.yml
-aws iam delete-access-key --user-name <PipelineUser> --access-key-id <clave-anterior> --profile jpadmin --region us-east-2
+aws iam delete-access-key --user-name <PipelineUser> --access-key-id <clave-anterior> --profile TU_PERFIL --region us-east-2
 ```
 
 - `<PipelineUser>` es el nombre del usuario: la última parte del output `PipelineUser` del stack de bootstrap (`aws-sam-cli-managed-dev-pipeline-resou-PipelineUser-...`).
@@ -536,7 +584,7 @@ aws iam delete-access-key --user-name <PipelineUser> --access-key-id <clave-ante
 | Tema | Bash (Linux/macOS) | PowerShell (Windows) |
 |---|---|---|
 | Continuar un comando en otra línea | `\` | `` ` `` (backtick) — en este README todo va en una línea |
-| Variable de entorno | `export AWS_PROFILE=jpadmin` | `$env:AWS_PROFILE = "jpadmin"` |
+| Variable de entorno | `export AWS_PROFILE=TU_PERFIL` | `$env:AWS_PROFILE = "TU_PERFIL"` |
 | Encadenar comandos | `cmd1 && cmd2` | PowerShell 7: igual. PowerShell 5.1: `cmd1; if ($?) { cmd2 }` |
 | curl | `curl` | `curl.exe` o `Invoke-RestMethod` |
 | Crear archivo de texto | `echo "x" > f.jpg` | `"x" \| Out-File f.jpg` |
